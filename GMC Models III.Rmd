@@ -1,0 +1,191 @@
+---
+title: "GMC Models II - Revised"
+author: "Alexander Murph"
+date: "11/6/2016"
+output: html_document
+---
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+library("grid")
+library("MASS")
+library(gplots)
+library(ggplot2)
+library(neuralnet)
+library(ROCR)
+library(rpart)
+library(rpart.plot)
+library("e1071")
+library(caret)
+library(pROC)
+```
+
+```{r, echo = FALSE}
+data_frame = read.csv("GMC_Complete_Data2.csv")
+data_frame = data_frame[,-1]
+head(data_frame, 10)
+
+data_frame$Septic_Date = as.factor(data_frame$Septic_Date)
+levels(data_frame$Septic_Date) = c('C1','C2')
+
+trainIndex <- createDataPartition(data_frame$Septic_Date,p=0.7,list=F)
+training_data <- data_frame[trainIndex,]
+testing_data <- data_frame[-trainIndex,]
+
+```
+
+```{r results = 'hide'}
+train_control <- trainControl(method = "cv", number=10,savePredictions = T,summaryFunction = twoClassSummary,classProbs = T)
+
+linearModel <- train(Septic_Date ~., data=training_data, trControl=train_control, method="glm",metric="ROC")
+
+annModel <- train(Septic_Date ~., data=training_data, trControl=train_control, method="nnet",metric="ROC",maxit=1000)
+
+treeModel <- train(Septic_Date ~., data=training_data, trControl=train_control, method="rpart1SE",metric="ROC")
+
+svmModel <- train(Septic_Date ~., data=training_data, trControl=train_control, method="svmLinear2",metric="ROC")
+
+```
+
+## Predicting Septic Shock from Sepsis with Linear Model
+
+This model uses the full cleaned data set. Using a logistic regression model, and the variables
+
+
+
+```{r, echo = FALSE, warning = FALSE}
+set.seed(5)
+my_sample = sample(1:nrow(data_frame), ceiling(nrow(data_frame)*0.7) )
+training_data = data_frame[my_sample,]
+testing_data = data_frame[-my_sample,]
+
+
+#linear_model = glm(Septic_Date ~ ., data = training_data, family = "binomial")
+
+
+```
+
+we predict the onset of Septic Shock (yes or no).
+
+```{r, echo = FALSE, warning = FALSE, message = F}
+
+#preds = predict(linear_model, type = "response", newdata = testing_data)
+# preds <- ifelse(preds > 0.5,1,0)
+
+
+library(ROCR)
+
+# p <- predict(linear_model, newdata= testing_data, type="response")
+# pr <- prediction(p, testing_data$Septic_Date)
+# prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+# plot(prf, col = 'purple')
+# 
+# auc <- performance(pr, measure = "auc")
+# auc <- auc@y.values[[1]]
+# auc
+
+predData <- predict(linearModel,testing_data,type="prob")
+annROC <- roc(testing_data$Septic_Date, predData$C1)
+plot(annROC)
+
+
+```
+
+# Predicting Septic Shock from Sepsis with Decision Tree Model
+
+This model uses the full cleaned data set. Using a decision tree model, and the variables
+
+```{r, echo = FALSE, warning = FALSE, message = F}
+library(rpart)
+library(ggplot2)
+library(rpart.plot)
+```
+
+```{r}
+rpart_model = treeModel
+
+```
+
+we predict the onset of Septic Shock (yes or no).  Also, because I think it is pretty, I included the visual of the decision tree.
+
+```{r, echo = FALSE, warning=FALSE}
+
+predData <- predict(treeModel,testing_data,type="prob")
+annROC <- roc(testing_data$Septic_Date, predData$C1)
+plot(annROC)
+
+```
+
+## Predicting Septic Shock from Sepsis with Support Vector Machine Model
+
+This model uses the full cleaned data set. Using a svm, and the variables  
+
+```{r, echo = FALSE, warning=FALSE, message = F}
+library("e1071")
+
+# svm_model = best.svm(Septic_Date ~., data = training_data)
+
+svm_model = svmModel
+
+```
+
+we predict the onset of Septic Shock (yes or no).
+
+```{r, echo = FALSE, warning=FALSE}
+predData <- predict(svmModel,testing_data,type="prob")
+annROC <- roc(testing_data$Septic_Date, predData$C1)
+plot(annROC)
+```
+
+## Predicting Septic Shock with ANN
+
+
+```{r, echo = FALSE, warning = FALSE}
+
+set.seed(25)
+index = sample(1:nrow(data_frame), ceiling(nrow(data_frame)*0.7) )
+data_frame$Septic_Date = as.numeric(data_frame$Septic_Date)
+
+maxs <- apply(data_frame, 2, max) 
+mins <- apply(data_frame, 2, min)
+
+scaled <- as.data.frame(scale(data_frame, center = mins, scale = maxs - mins))
+
+train_ <- scaled[index,]
+test_ <- scaled[-index,]
+```
+
+```{r}
+n <- names(train_)
+f <- as.formula(paste("Septic_Date ~", paste(n[-10], collapse = " + ")))
+```
+
+```{r, message=F, warning=F}
+nn = annModel
+
+```
+
+
+```{r, message=F, warning=F, echo = F, fig.width = 10, fig.height = 5}
+library(devtools)
+source_url('https://gist.githubusercontent.com/fawda123/7471137/raw/466c1474d0a505ff044412703516c34f1a4684a5/nnet_plot_update.r')
+
+plot.nnet(nn) 
+```
+
+```{r}
+# p <- predict(annModel, newdata= testing_data, type="raw")
+# pr <- prediction(p, testing_data$Septic_Date)
+# prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+# plot(prf, col = 'purple')
+# 
+# auc <- performance(pr, measure = "auc")
+# auc <- auc@y.values[[1]]
+# auc
+
+predData <- predict(annModel,testing_data,type="prob")
+annROC <- roc(testing_data$Septic_Date, predData$C1)
+plot(annROC)
+```
+
+
+
